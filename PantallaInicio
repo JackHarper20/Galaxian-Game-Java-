@@ -1,0 +1,392 @@
+package galaxian;
+import javax.swing.*;
+import java.awt.*;
+import java.awt.event.*;
+import java.io.*;
+import java.util.*;
+import javax.imageio.ImageIO;
+import javax.sound.sampled.*;
+import javax.swing.Timer;
+
+public class PantallaInicio extends JPanel {
+    private ImageIcon fondoAnimado;
+    private Font fuenteArcade;
+    private Image logoFlotante;
+    private JButton btnIniciar, btnSeleccionarTema, btnRegistrar, btnSesion, btnContinuar, btnConfig, btnEstadisticas;
+    private Clip musicaClip;
+    private FloatControl musicaControl;
+    private float volumenMusica = 0f;
+    private float volumenBoton = 0f;
+    private double floatAngle = 0;
+    private Timer animTimer;
+    public static PantallaInicio pantallaInicioGlobal;
+    public static Usuario usuarioActual;
+    private JLabel lblUsuarioActivo;
+    
+    public PantallaInicio() {
+        setLayout(null);
+        fondoAnimado = new ImageIcon("src/assets/fondo.gif");
+
+        try {
+            fuenteArcade = Font.createFont(Font.TRUETYPE_FONT, new File("src/assets/arcade.ttf"));
+            GraphicsEnvironment.getLocalGraphicsEnvironment().registerFont(fuenteArcade);
+        } catch (Exception e) {
+            fuenteArcade = new Font("SansSerif", Font.BOLD, 32);
+        }
+
+        try {
+            logoFlotante = ImageIO.read(new File("src/assets/logo.png"));
+        } catch (IOException e) {}
+
+        btnIniciar = crearBoton("Iniciar   Partida");
+        btnSeleccionarTema = crearBoton("Seleccionar  Tema");
+        btnRegistrar = crearBoton("Registrarse");
+        btnSesion = crearBoton("Iniciar  Sesion");
+        btnContinuar = crearBoton("Continuar Partida");
+        btnEstadisticas = crearBoton("Estadisticas");
+        btnConfig = new JButton("Config");
+
+        configurarBotones();
+
+        add(btnIniciar);
+        add(btnSeleccionarTema);
+        add(btnRegistrar);
+        add(btnSesion);
+        add(btnContinuar);
+        add(btnEstadisticas);
+        add(btnConfig);
+
+        btnConfig.setFont(new Font("arcade", Font.BOLD, 12));
+        btnConfig.setBounds(getWidth() - 120, 10, 110, 30);
+        btnConfig.setFocusPainted(false);
+        btnConfig.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        btnConfig.addActionListener(e -> abrirPanelConfiguracion());
+
+        addComponentListener(new ComponentAdapter() {
+            public void componentResized(ComponentEvent e) {
+                btnConfig.setBounds(getWidth() - 120, 10, 110, 30);
+                reposicionarComponentes();
+            }
+        });
+
+        animTimer = new Timer(16, e -> {
+            floatAngle += 0.05;
+            repaint();
+        });
+        animTimer.start();
+
+        reproducirMusica("src/assets/OST1.wav");
+        pantallaInicioGlobal = this;
+        lblUsuarioActivo = new JLabel("");
+lblUsuarioActivo.setForeground(Color.WHITE);
+lblUsuarioActivo.setFont(fuenteArcade.deriveFont(14f));
+lblUsuarioActivo.setBounds(20, 10, 400, 30);
+add(lblUsuarioActivo);
+    }
+    public void actualizarEtiquetaUsuario() {
+        if (usuarioActual != null) {
+        lblUsuarioActivo.setText("Sesion activa  " + usuarioActual.getNombre() +
+            "   Max Score  " + usuarioActual.getScoreMaximo());
+    } else {
+        lblUsuarioActivo.setText("");
+    }
+}
+    private void configurarBotones() {
+    btnIniciar.addActionListener(e -> {
+        reproducirSonidoBoton();
+        if (usuarioActual == null) {
+            JOptionPane.showMessageDialog(this, "Debes iniciar sesión para jugar.", "Aviso", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (musicaClip != null && musicaClip.isRunning()) {
+            musicaClip.stop();
+            musicaClip.close();
+        }
+        JFrame topFrame = (JFrame) SwingUtilities.getWindowAncestor(this);
+        topFrame.setContentPane(new JuegoGalaxian());
+        topFrame.revalidate();
+        topFrame.repaint();
+    });
+
+    btnSeleccionarTema.addActionListener(e -> {
+        reproducirSonidoBoton();
+        if (usuarioActual == null) {
+            JOptionPane.showMessageDialog(this, "Debes iniciar sesión para seleccionar un tema.", "Aviso", JOptionPane.WARNING_MESSAGE);
+            return;
+        }
+        if (musicaClip != null && musicaClip.isRunning()) {
+            musicaClip.stop();
+            musicaClip.close();
+        }
+        JFrame topFrame = (JFrame) SwingUtilities.getWindowAncestor(this);
+        TemasJuego panelTemas = new TemasJuego(topFrame);
+        topFrame.setContentPane(panelTemas);
+        topFrame.revalidate();
+        topFrame.repaint();
+    });
+
+btnRegistrar.addActionListener(e -> {
+    reproducirSonidoBoton();
+    JPanel panel = new JPanel(new GridLayout(0, 2));
+    JTextField campoNombre = new JTextField();
+    JTextField campoCorreo = new JTextField();
+    JTextField campoEdad = new JTextField();
+    JTextField campoSexo = new JTextField();
+    JPasswordField campoPass = new JPasswordField();
+
+    panel.add(new JLabel("Nombre:")); panel.add(campoNombre);
+    panel.add(new JLabel("Correo (@gmail.com):")); panel.add(campoCorreo);
+    panel.add(new JLabel("Edad (1-80):")); panel.add(campoEdad);
+    panel.add(new JLabel("Sexo (M/F):")); panel.add(campoSexo);
+    panel.add(new JLabel("Contraseña:")); panel.add(campoPass);
+
+    int resultado = JOptionPane.showConfirmDialog(this, panel, "Registro de usuario", JOptionPane.OK_CANCEL_OPTION);
+    if (resultado == JOptionPane.OK_OPTION) {
+        String nombre = campoNombre.getText().trim();
+        String correo = campoCorreo.getText().trim();
+        String edadStr = campoEdad.getText().trim();
+        String sexoStr = campoSexo.getText().trim().toUpperCase();
+        String pass = new String(campoPass.getPassword());
+
+        if (!correo.endsWith("@gmail.com")) {
+            JOptionPane.showMessageDialog(this, "El correo debe terminar en @gmail.com", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        int edad;
+        try {
+            edad = Integer.parseInt(edadStr);
+            if (edad < 1 || edad > 80) throw new NumberFormatException();
+        } catch (NumberFormatException ex) {
+            JOptionPane.showMessageDialog(this, "Edad inválida", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+        if (!(sexoStr.equals("M") || sexoStr.equals("F"))) {
+            JOptionPane.showMessageDialog(this, "Sexo debe ser M o F", "Error", JOptionPane.ERROR_MESSAGE);
+            return;
+        }
+
+ try {
+    File carpetaUsuarios = new File("src/usuarios");
+    if (!carpetaUsuarios.exists()) {
+        carpetaUsuarios.mkdirs(); 
+    }
+
+    
+    File archivoUsuario = new File(carpetaUsuarios, nombre + ".txt");
+    if (archivoUsuario.exists()) {
+        JOptionPane.showMessageDialog(this, "Ese nombre de usuario ya existe", "Error", JOptionPane.ERROR_MESSAGE);
+        return;
+    }
+     
+    char sexo = sexoStr.charAt(0);
+    galaxian.Usuario nuevoUsuario = new galaxian.Usuario(nombre, correo, edad, sexo, pass);
+    usuarioActual = nuevoUsuario;
+    usuarioActual.guardarEnArchivo();
+    actualizarEtiquetaUsuario();
+
+    JOptionPane.showMessageDialog(this, "Usuario registrado con éxito", "Registro", JOptionPane.INFORMATION_MESSAGE);
+} catch (Exception ex) {
+    JOptionPane.showMessageDialog(this, "Error al guardar usuario", "Error", JOptionPane.ERROR_MESSAGE);
+    ex.printStackTrace();
+}
+    }
+});
+
+btnSesion.addActionListener(e -> {
+    reproducirSonidoBoton();
+
+    JPanel panel = new JPanel(new GridLayout(0, 2));
+    JTextField campoUsuario = new JTextField();
+    JPasswordField campoPass = new JPasswordField();
+
+    panel.add(new JLabel("Nombre de Usuario:")); panel.add(campoUsuario);
+    panel.add(new JLabel("Contraseña:")); panel.add(campoPass);
+
+    int resultado = JOptionPane.showConfirmDialog(this, panel, "Inicio de Sesión", JOptionPane.OK_CANCEL_OPTION);
+    if (resultado == JOptionPane.OK_OPTION) {
+        String nombre = campoUsuario.getText().trim();
+        String pass = new String(campoPass.getPassword());
+
+        galaxian.Usuario u = galaxian.Usuario.cargarDesdeArchivo(nombre);
+
+        if (u == null) {
+            JOptionPane.showMessageDialog(this, "Usuario no encontrado", "Error", JOptionPane.ERROR_MESSAGE);
+        } else if (!u.getContraseña().equals(pass)) {
+            JOptionPane.showMessageDialog(this, "Contraseña incorrecta", "Error", JOptionPane.ERROR_MESSAGE);
+        } else {
+            galaxian.Usuario.setUsuarioActual(u); 
+            PantallaInicio.usuarioActual = u;
+            actualizarEtiquetaUsuario();
+            JOptionPane.showMessageDialog(this, "Sesión iniciada correctamente\nBienvenido " + u.getNombre(), "Éxito", JOptionPane.INFORMATION_MESSAGE);
+        }
+    }
+});
+
+    btnContinuar.addActionListener(e -> {
+        reproducirSonidoBoton();
+        JOptionPane.showMessageDialog(this, "No hay partidas disponibles.", "Información", JOptionPane.INFORMATION_MESSAGE);
+    });
+
+btnEstadisticas.addActionListener(e -> {
+    reproducirSonidoBoton();
+    
+    if (usuarioActual == null) {
+        JOptionPane.showMessageDialog(this, "Debes iniciar sesión para ver estadísticas.", "Aviso", JOptionPane.WARNING_MESSAGE);
+        return;
+    }
+
+    if (musicaClip != null && musicaClip.isRunning()) {
+        musicaClip.stop();
+        musicaClip.close();
+    }
+
+    JFrame topFrame = (JFrame) SwingUtilities.getWindowAncestor(this);
+    PantallaEstadisticas panelEstadisticas = new PantallaEstadisticas(topFrame, usuarioActual);
+    topFrame.setContentPane(panelEstadisticas);
+    topFrame.revalidate();
+    topFrame.repaint();
+});
+}
+
+    
+    
+    private void reproducirMusica(String ruta) {
+        try {
+            AudioInputStream audioInputStream = AudioSystem.getAudioInputStream(new File(ruta));
+            musicaClip = AudioSystem.getClip();
+            musicaClip.open(audioInputStream);
+            musicaControl = (FloatControl) musicaClip.getControl(FloatControl.Type.MASTER_GAIN);
+            aplicarVolumenMusica();
+            musicaClip.loop(Clip.LOOP_CONTINUOUSLY);
+            musicaClip.start();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+    }
+
+    private void reproducirSonidoBoton() {
+        new Thread(() -> {
+            try {
+                Clip clip = AudioSystem.getClip();
+                clip.open(AudioSystem.getAudioInputStream(new File("src/assets/botonsonido.wav")));
+                FloatControl control = (FloatControl) clip.getControl(FloatControl.Type.MASTER_GAIN);
+                control.setValue(volumenBoton);
+                clip.start();
+            } catch (Exception e) {
+                e.printStackTrace();
+            }
+        }).start();
+    }
+
+    private void abrirPanelConfiguracion() {
+        JSlider sliderMusica = new JSlider(-80, 6, (int) volumenMusica);
+        JSlider sliderBoton = new JSlider(-80, 6, (int) volumenBoton);
+        sliderMusica.setMajorTickSpacing(20);
+        sliderMusica.setPaintTicks(true);
+        sliderMusica.setPaintLabels(true);
+        sliderBoton.setMajorTickSpacing(20);
+        sliderBoton.setPaintTicks(true);
+        sliderBoton.setPaintLabels(true);
+
+        JPanel panel = new JPanel(new GridLayout(4, 1));
+        panel.add(new JLabel("Volumen de la música:"));
+        panel.add(sliderMusica);
+        panel.add(new JLabel("Volumen del botón:"));
+        panel.add(sliderBoton);
+
+        int res = JOptionPane.showConfirmDialog(this, panel, "Configuración de Volumen", JOptionPane.OK_CANCEL_OPTION);
+        if (res == JOptionPane.OK_OPTION) {
+            volumenMusica = sliderMusica.getValue();
+            volumenBoton = sliderBoton.getValue();
+            aplicarVolumenMusica();
+        }
+    }
+
+    private void aplicarVolumenMusica() {
+        if (musicaControl != null) {
+            musicaControl.setValue(volumenMusica);
+        }
+    }
+
+    private JButton crearBoton(String texto) {
+        JButton boton = new JButton(texto);
+        boton.setFont(fuenteArcade.deriveFont(18f));
+        boton.setBackground(Color.BLACK);
+        boton.setForeground(Color.GREEN);
+        boton.setFocusPainted(false);
+        boton.setCursor(new Cursor(Cursor.HAND_CURSOR));
+        boton.addMouseListener(new MouseAdapter() {
+            public void mouseEntered(MouseEvent e) {
+                reproducirSonidoBoton();
+            }
+        });
+        return boton;
+    }
+
+    private void reposicionarComponentes() {
+        int w = getWidth();
+        int baseY = getHeight() / 2 + 60;
+        int botonAncho = 300;
+        int botonAlto = 40;
+        int espacio = 10;
+
+        btnIniciar.setBounds((w - botonAncho) / 2, baseY, botonAncho, botonAlto);
+        btnSeleccionarTema.setBounds((w - botonAncho) / 2, baseY + (botonAlto + espacio), botonAncho, botonAlto);
+        btnRegistrar.setBounds((w - botonAncho) / 2, baseY + 2 * (botonAlto + espacio), botonAncho, botonAlto);
+        btnSesion.setBounds((w - botonAncho) / 2, baseY + 3 * (botonAlto + espacio), botonAncho, botonAlto);
+        btnEstadisticas.setBounds((w - botonAncho) / 2, baseY + 4 * (botonAlto + espacio), botonAncho, botonAlto);
+        btnContinuar.setBounds((w - botonAncho) / 2, baseY + 5 * (botonAlto + espacio), botonAncho, botonAlto);
+    }
+
+    @Override
+    protected void paintComponent(Graphics g) {
+        super.paintComponent(g);
+        g.drawImage(fondoAnimado.getImage(), 0, 0, getWidth(), getHeight(), this);
+        Graphics2D g2d = (Graphics2D) g;
+        g2d.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        if (logoFlotante != null) {
+            int logoW = logoFlotante.getWidth(null);
+            int x = (getWidth() - logoW) / 2;
+            int y = (int) (getHeight() * 0.18 + Math.sin(floatAngle) * 10);
+            g.drawImage(logoFlotante, x, y, null);
+        }
+        String titulo = "GALAXIAN EDU";
+        Font tituloFont = fuenteArcade.deriveFont(Font.PLAIN, getWidth() / 10f);
+        g2d.setFont(tituloFont);
+        FontMetrics fm = g2d.getFontMetrics();
+        int xTitulo = (getWidth() - fm.stringWidth(titulo)) / 2;
+        int yTitulo = getHeight() / 2 - 40;
+        for (int i = 4; i > 0; i--) {
+            g2d.setColor(new Color(255, 0, 255, 30 * i));
+            g2d.drawString(titulo, xTitulo + i, yTitulo + i);
+        }
+        g2d.setColor(new Color(0, 255, 255));
+        g2d.drawString(titulo, xTitulo, yTitulo);
+        String subtitulo = "Pon a prueba tu conocimiento";
+        Font subtituloFont = fuenteArcade.deriveFont(Font.PLAIN, getWidth() / 40f);
+        g2d.setFont(subtituloFont);
+        FontMetrics fmSub = g2d.getFontMetrics();
+        int xSub = (getWidth() - fmSub.stringWidth(subtitulo)) / 2;
+        int ySub = yTitulo + 40;
+        for (int i = 2; i > 0; i--) {
+            g2d.setColor(new Color(0, 255, 255, 60 * i));
+            g2d.drawString(subtitulo, xSub + i, ySub + i);
+        }
+        g2d.setColor(Color.WHITE);
+        g2d.drawString(subtitulo, xSub, ySub);
+    }
+
+    public static void main(String[] args) {
+        SwingUtilities.invokeLater(() -> {
+            JFrame frame = new JFrame("GALAXIAN EDU");
+            PantallaInicio panel = new PantallaInicio();
+            frame.setContentPane(panel);
+            frame.setExtendedState(JFrame.MAXIMIZED_BOTH);
+            frame.setUndecorated(true);
+            frame.setDefaultCloseOperation(JFrame.EXIT_ON_CLOSE);
+            frame.setVisible(true);
+        });
+    }
+}
